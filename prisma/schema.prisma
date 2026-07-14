@@ -1,0 +1,76 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  githubId    String   @unique
+  githubLogin String
+  accessToken String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  repos       Repo[]
+}
+
+model Repo {
+  id             String   @id @default(cuid())
+  userId         String
+  fullName       String   // "owner/repo"
+  webhookId      Int?     // GitHub webhook ID for cleanup
+  installationId String?  // if using GitHub App auth (stretch)
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rules          Rule[]
+  events         Event[]
+
+  @@unique([userId, fullName])
+}
+
+model Rule {
+  id            String   @id @default(cuid())
+  repoId        String
+  eventType     String   // "issues", "pull_request"
+  matchField    String   // "title", "author", "label"
+  matchOperator String   // "contains", "equals"
+  matchValue    String
+  actionType    String   // "add_label", "comment", "slack_notify"
+  actionValue   String   // label name / comment template
+  enabled       Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  repo          Repo     @relation(fields: [repoId], references: [id], onDelete: Cascade)
+}
+
+model Event {
+  id               String      @id @default(cuid())
+  repoId           String
+  githubDeliveryId String      @unique // idempotency key from X-GitHub-Delivery header
+  eventType        String
+  action           String?     // "opened", "closed" etc
+  payload          Json
+  status           String      @default("received") // received | processing | done | failed | dead
+  attempts         Int         @default(0)
+  lastError        String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  repo             Repo        @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  actions          ActionLog[]
+}
+
+model ActionLog {
+  id        String   @id @default(cuid())
+  eventId   String
+  type      String   // "github_label" | "github_comment" | "slack_message"
+  status    String   // "success" | "failed"
+  detail    String?
+  createdAt DateTime @default(now())
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+}
