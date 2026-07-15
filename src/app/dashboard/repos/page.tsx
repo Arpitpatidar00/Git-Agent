@@ -3,12 +3,20 @@ import { prisma } from "@/lib/db/prisma";
 import { createOctokitClient } from "@/lib/github/client";
 import { redirect } from "next/navigation";
 import { ReposView } from "../../../modules/repos";
-import { getAuthSession, getServerAccessToken } from "@/lib/auth/session";
+import { getAuthSession } from "@/lib/auth/session";
 
 export default async function Page() {
   const session = await getAuthSession();
-  const accessToken = await getServerAccessToken();
-  if (!session || !accessToken) {
+  if (!session) {
+    redirect("/");
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { githubId: session.user.githubId },
+    include: { repos: true },
+  });
+
+  if (!user || !user.accessToken) {
     redirect("/");
   }
 
@@ -18,19 +26,14 @@ export default async function Page() {
     queryKey: ["repos"],
     queryFn: async () => {
       try {
-        const octokit = createOctokitClient(accessToken);
+        const octokit = createOctokitClient(user.accessToken!);
         const { data: repos } = await octokit.repos.listForAuthenticatedUser({
           sort: "updated",
           per_page: 100,
           type: "owner",
         });
 
-        const user = await prisma.user.findUnique({
-          where: { githubId: session.user.githubId },
-          include: { repos: true },
-        });
-
-        const connectedRepoNames = new Set(user?.repos.map((r) => r.fullName) || []);
+        const connectedRepoNames = new Set(user.repos.map((r) => r.fullName));
 
         const repoList = repos.map((repo) => ({
           fullName: repo.full_name,

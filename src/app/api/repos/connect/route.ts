@@ -9,27 +9,29 @@ import { getAuthSession, getServerAccessToken } from "@/lib/auth/session";
  */
 export async function GET() {
   const session = await getAuthSession();
-  const accessToken = await getServerAccessToken();
-  if (!session || !accessToken) {
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const octokit = createOctokitClient(accessToken);
+    const user = await prisma.user.findUnique({
+      where: { githubId: session.user.githubId },
+      include: { repos: true },
+    });
+
+    if (!user || !user.accessToken) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const octokit = createOctokitClient(user.accessToken);
     const { data: repos } = await octokit.repos.listForAuthenticatedUser({
       sort: "updated",
       per_page: 100,
       type: "owner",
     });
 
-    // Also get connected repos from our DB
-    const user = await prisma.user.findUnique({
-      where: { githubId: session.user.githubId },
-      include: { repos: true },
-    });
-
     const connectedRepoNames = new Set(
-      user?.repos.map((r) => r.fullName) || [],
+      user.repos.map((r) => r.fullName),
     );
 
     const repoList = repos.map((repo) => ({
