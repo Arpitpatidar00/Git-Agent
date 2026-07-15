@@ -32,11 +32,13 @@ export const authOptions: NextAuthOptions = {
             accessToken: account.access_token,
           },
         });
-        return true;
       } catch (error) {
-        console.error("Error during sign in:", error);
-        return false;
+        // Log the error but don't block sign-in.
+        // JWT sessions don't require the DB row to function —
+        // the user can still authenticate and we'll sync later.
+        console.error("[AUTH] Failed to upsert user in DB (sign-in still allowed):", error);
       }
+      return true;
     },
     async jwt({ token, account }) {
       if (account) {
