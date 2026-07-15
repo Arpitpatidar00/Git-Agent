@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
-import { JOB_STATUS } from "@/lib/constants";
+import { JOB_STATUS } from "@/constants";
 import type { Prisma } from "@prisma/client";
 
 /**
@@ -11,7 +11,7 @@ export async function enqueueEvent(
   eventType: string,
   action: string | null,
   payload: Record<string, unknown>,
-  deliveryId: string
+  deliveryId: string,
 ) {
   try {
     const event = await prisma.event.create({

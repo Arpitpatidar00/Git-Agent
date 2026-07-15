@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { authOptions } from "@/lib/auth/config";
 import { prisma } from "@/lib/db/prisma";
 import { createOctokitClient } from "@/lib/github/client";
-import { WEBHOOK_EVENTS } from "@/lib/constants";
+import { WEBHOOK_EVENTS } from "@/constants";
 
 interface SessionWithToken {
   accessToken: string;
@@ -19,7 +19,9 @@ interface SessionWithToken {
  * GET — List the authenticated user's GitHub repos.
  */
 export async function GET() {
-  const session = (await getServerSession(authOptions)) as SessionWithToken | null;
+  const session = (await getServerSession(
+    authOptions,
+  )) as SessionWithToken | null;
   if (!session?.accessToken) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -38,7 +40,9 @@ export async function GET() {
       include: { repos: true },
     });
 
-    const connectedRepoNames = new Set(user?.repos.map((r) => r.fullName) || []);
+    const connectedRepoNames = new Set(
+      user?.repos.map((r) => r.fullName) || [],
+    );
 
     const repoList = repos.map((repo) => ({
       fullName: repo.full_name,
@@ -52,7 +56,7 @@ export async function GET() {
     console.error("Error fetching repos:", error);
     return NextResponse.json(
       { error: "Failed to fetch repos" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -61,7 +65,9 @@ export async function GET() {
  * POST — Connect a repo: store in DB + create GitHub webhook.
  */
 export async function POST(request: NextRequest) {
-  const session = (await getServerSession(authOptions)) as SessionWithToken | null;
+  const session = (await getServerSession(
+    authOptions,
+  )) as SessionWithToken | null;
   if (!session?.accessToken) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -72,7 +78,7 @@ export async function POST(request: NextRequest) {
   if (!fullName || !fullName.includes("/")) {
     return NextResponse.json(
       { error: "Invalid repo name — expected 'owner/repo'" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -96,7 +102,7 @@ export async function POST(request: NextRequest) {
     if (existingRepo) {
       return NextResponse.json(
         { error: "Repo already connected" },
-        { status: 409 }
+        { status: 409 },
       );
     }
 
@@ -125,8 +131,12 @@ export async function POST(request: NextRequest) {
     } catch (err: any) {
       console.warn("Failed to register GitHub webhook:", err.message);
       // If it failed because of localhost (422), allow the repo to connect in DB for local development
-      if (webhookUrl.includes("localhost") || webhookUrl.includes("127.0.0.1")) {
-        warning = "Repository connected locally, but GitHub webhook was skipped because localhost is not publicly reachable.";
+      if (
+        webhookUrl.includes("localhost") ||
+        webhookUrl.includes("127.0.0.1")
+      ) {
+        warning =
+          "Repository connected locally, but GitHub webhook was skipped because localhost is not publicly reachable.";
       } else {
         throw err;
       }
@@ -149,8 +159,11 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Error connecting repo:", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to connect repo" },
-      { status: 500 }
+      {
+        error:
+          error instanceof Error ? error.message : "Failed to connect repo",
+      },
+      { status: 500 },
     );
   }
 }
@@ -159,7 +172,9 @@ export async function POST(request: NextRequest) {
  * DELETE — Disconnect a repo: remove webhook + delete from DB.
  */
 export async function DELETE(request: NextRequest) {
-  const session = (await getServerSession(authOptions)) as SessionWithToken | null;
+  const session = (await getServerSession(
+    authOptions,
+  )) as SessionWithToken | null;
   if (!session?.accessToken) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -168,10 +183,7 @@ export async function DELETE(request: NextRequest) {
   const { fullName } = body as { fullName: string };
 
   if (!fullName || !fullName.includes("/")) {
-    return NextResponse.json(
-      { error: "Invalid repo name" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Invalid repo name" }, { status: 400 });
   }
 
   const [owner, repo] = fullName.split("/");
@@ -204,7 +216,9 @@ export async function DELETE(request: NextRequest) {
         });
       } catch {
         // Webhook may already be deleted — continue with DB cleanup
-        console.warn(`Failed to delete webhook ${existingRepo.webhookId} from ${fullName}`);
+        console.warn(
+          `Failed to delete webhook ${existingRepo.webhookId} from ${fullName}`,
+        );
       }
     }
 
@@ -216,7 +230,7 @@ export async function DELETE(request: NextRequest) {
     console.error("Error disconnecting repo:", error);
     return NextResponse.json(
       { error: "Failed to disconnect repo" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

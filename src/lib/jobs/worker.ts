@@ -9,7 +9,7 @@ import {
   ACTION_LOG_STATUS,
   MAX_RETRY_ATTEMPTS,
   JOB_BATCH_SIZE,
-} from "@/lib/constants";
+} from "@/constants";
 
 /**
  * Extracts issue/PR number and title from a GitHub event payload.
@@ -40,7 +40,7 @@ async function executeAction(
   eventType: string,
   eventAction: string | null,
   title: string,
-  htmlUrl: string
+  htmlUrl: string,
 ): Promise<string> {
   const octokit = createOctokitClient(accessToken);
 
@@ -51,7 +51,13 @@ async function executeAction(
         break;
 
       case ACTION_TYPES.COMMENT:
-        await postComment(octokit, owner, repo, issueNumber, action.actionValue);
+        await postComment(
+          octokit,
+          owner,
+          repo,
+          issueNumber,
+          action.actionValue,
+        );
         break;
 
       case ACTION_TYPES.SLACK_NOTIFY: {
@@ -61,7 +67,7 @@ async function executeAction(
           eventAction,
           title,
           htmlUrl,
-          [action.actionValue]
+          [action.actionValue],
         );
         await sendSlackNotification(message);
         break;
@@ -146,7 +152,9 @@ export async function processJobs(): Promise<{
       const accessToken = event.repo.user.accessToken;
 
       if (!accessToken) {
-        throw new Error("User access token not found — cannot make GitHub API calls");
+        throw new Error(
+          "User access token not found — cannot make GitHub API calls",
+        );
       }
 
       // Evaluate rules
@@ -164,7 +172,11 @@ export async function processJobs(): Promise<{
 
       // Extract event details for action execution
       const [owner, repo] = event.repo.fullName.split("/");
-      const { number: issueNumber, title, htmlUrl } = extractEventDetails(payload);
+      const {
+        number: issueNumber,
+        title,
+        htmlUrl,
+      } = extractEventDetails(payload);
 
       // Execute all matched actions
       const results: string[] = [];
@@ -180,7 +192,7 @@ export async function processJobs(): Promise<{
           event.eventType,
           event.action,
           title,
-          htmlUrl
+          htmlUrl,
         );
         results.push(result);
       }
@@ -202,13 +214,17 @@ export async function processJobs(): Promise<{
         succeeded++;
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       const newAttempts = event.attempts + 1;
 
       await prisma.event.update({
         where: { id: event.id },
         data: {
-          status: newAttempts >= MAX_RETRY_ATTEMPTS ? JOB_STATUS.DEAD : JOB_STATUS.FAILED,
+          status:
+            newAttempts >= MAX_RETRY_ATTEMPTS
+              ? JOB_STATUS.DEAD
+              : JOB_STATUS.FAILED,
           lastError: errorMessage,
         },
       });

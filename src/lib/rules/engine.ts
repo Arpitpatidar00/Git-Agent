@@ -1,9 +1,5 @@
 import { Rule } from "@prisma/client";
-import {
-  MATCH_OPERATORS,
-  ACTION_TYPES,
-  ACTION_LOG_TYPES,
-} from "@/lib/constants";
+import { MATCH_OPERATORS, ACTION_TYPES, ACTION_LOG_TYPES } from "@/constants";
 
 /**
  * Represents an action to be executed by the worker.
@@ -21,7 +17,7 @@ export interface ActionToExecute {
 function extractFieldValue(
   payload: Record<string, unknown>,
   eventType: string,
-  matchField: string
+  matchField: string,
 ): string | null {
   // The primary object is issue or pull_request depending on event type
   const primary =
@@ -59,7 +55,7 @@ function extractFieldValue(
 function matchesRule(
   fieldValue: string,
   operator: string,
-  matchValue: string
+  matchValue: string,
 ): boolean {
   const normalizedField = fieldValue.toLowerCase();
   const normalizedMatch = matchValue.toLowerCase();
@@ -113,7 +109,7 @@ function getLogType(actionType: string): string {
 export function evaluateRules(
   eventType: string,
   payload: Record<string, unknown>,
-  rules: Rule[]
+  rules: Rule[],
 ): ActionToExecute[] {
   const actions: ActionToExecute[] = [];
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { authOptions } from "@/lib/auth/config";
 import { prisma } from "@/lib/db/prisma";
 
 interface SessionWithToken {
@@ -25,7 +25,9 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const repoId = searchParams.get("repoId");
-  const limit = parseInt(searchParams.get("limit") || "50", 10);
+  const page = parseInt(searchParams.get("page") || "1", 10);
+  const limit = parseInt(searchParams.get("limit") || "20", 10);
+  const skip = (page - 1) * limit;
 
   const user = await prisma.user.findUnique({
     where: { githubId: session.user.githubId },
@@ -43,7 +45,8 @@ export async function GET(request: NextRequest) {
   const events = await prisma.event.findMany({
     where: { repoId: { in: repoIds } },
     orderBy: { createdAt: "desc" },
-    take: Math.min(limit, 100),
+    skip,
+    take: limit + 1,
     include: {
       actions: {
         orderBy: { createdAt: "desc" },
@@ -54,12 +57,17 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  // Stats
+  const hasNextPage = events.length > limit;
+  const paginatedEvents = hasNextPage ? events.slice(0, limit) : events;
+  const nextPage = hasNextPage ? page + 1 : null;
+
+  // Stats (always calculate total status count across all events for the repo context, not just the page)
   const stats = await prisma.event.groupBy({
     by: ["status"],
     where: { repoId: { in: repoIds } },
     _count: true,
   });
 
-  return NextResponse.json({ events, stats, repos: user.repos });
+  return NextResponse.json({ events: paginatedEvents, nextPage, stats, repos: user.repos });
 }
+
