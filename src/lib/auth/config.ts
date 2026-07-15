@@ -48,9 +48,10 @@ export const authOptions: NextAuthOptions = {
       return token;
     },
     async session({ session, token }: { session: Session; token: JWT }) {
+      // SECURITY: accessToken is NOT included in the client-visible session.
+      // It stays in the JWT (server-only). Use getServerAccessToken() to access it.
       return {
         ...session,
-        accessToken: token.accessToken as string,
         user: {
           ...session.user,
           githubId: token.githubId as string,

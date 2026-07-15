@@ -74,6 +74,10 @@ function matchesRule(
       return normalizedField.endsWith(normalizedMatch);
     case MATCH_OPERATORS.REGEX:
       try {
+        // SECURITY: Limit regex pattern length to prevent ReDoS
+        if (matchValue.length > 200) {
+          return false;
+        }
         const regex = new RegExp(matchValue, "i");
         return regex.test(fieldValue);
       } catch {

@@ -1,22 +1,11 @@
 import { dehydrate, HydrationBoundary, QueryClient } from "@tanstack/react-query";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth/config";
 import { prisma } from "@/lib/db/prisma";
 import { redirect } from "next/navigation";
 import { RulesView } from "../../../modules/rules";
-
-interface SessionWithToken {
-  accessToken: string;
-  user: {
-    githubId: string;
-    name?: string | null;
-    email?: string | null;
-    image?: string | null;
-  };
-}
+import { getAuthSession } from "@/lib/auth/session";
 
 export default async function Page() {
-  const session = (await getServerSession(authOptions)) as SessionWithToken | null;
+  const session = await getAuthSession();
   if (!session) {
     redirect("/");
   }

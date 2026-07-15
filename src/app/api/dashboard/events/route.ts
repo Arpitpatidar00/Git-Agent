@@ -1,24 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth/config";
 import { prisma } from "@/lib/db/prisma";
-
-interface SessionWithToken {
-  accessToken: string;
-  user: {
-    githubId: string;
-    name?: string | null;
-    email?: string | null;
-    image?: string | null;
-  };
-}
+import { getAuthSession } from "@/lib/auth/session";
 
 /**
  * GET — Fetch events for the dashboard with ActionLog join.
  * Query params: repoId (optional), limit (optional, default 50)
  */
 export async function GET(request: NextRequest) {
-  const session = (await getServerSession(authOptions)) as SessionWithToken | null;
+  const session = await getAuthSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

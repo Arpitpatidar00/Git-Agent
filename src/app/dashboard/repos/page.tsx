@@ -1,24 +1,14 @@
 import { dehydrate, HydrationBoundary, QueryClient } from "@tanstack/react-query";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth/config";
 import { prisma } from "@/lib/db/prisma";
 import { createOctokitClient } from "@/lib/github/client";
 import { redirect } from "next/navigation";
 import { ReposView } from "../../../modules/repos";
-
-interface SessionWithToken {
-  accessToken: string;
-  user: {
-    githubId: string;
-    name?: string | null;
-    email?: string | null;
-    image?: string | null;
-  };
-}
+import { getAuthSession, getServerAccessToken } from "@/lib/auth/session";
 
 export default async function Page() {
-  const session = (await getServerSession(authOptions)) as SessionWithToken | null;
-  if (!session?.accessToken) {
+  const session = await getAuthSession();
+  const accessToken = await getServerAccessToken();
+  if (!session || !accessToken) {
     redirect("/");
   }
 
@@ -28,7 +18,7 @@ export default async function Page() {
     queryKey: ["repos"],
     queryFn: async () => {
       try {
-        const octokit = createOctokitClient(session.accessToken);
+        const octokit = createOctokitClient(accessToken);
         const { data: repos } = await octokit.repos.listForAuthenticatedUser({
           sort: "updated",
           per_page: 100,

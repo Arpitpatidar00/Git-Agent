@@ -1,33 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth/config";
 import { prisma } from "@/lib/db/prisma";
 import { createOctokitClient } from "@/lib/github/client";
 import { WEBHOOK_EVENTS } from "@/constants";
-
-interface SessionWithToken {
-  accessToken: string;
-  user: {
-    githubId: string;
-    name?: string | null;
-    email?: string | null;
-    image?: string | null;
-  };
-}
+import { getAuthSession, getServerAccessToken } from "@/lib/auth/session";
 
 /**
  * GET — List the authenticated user's GitHub repos.
  */
 export async function GET() {
-  const session = (await getServerSession(
-    authOptions,
-  )) as SessionWithToken | null;
-  if (!session?.accessToken) {
+  const session = await getAuthSession();
+  const accessToken = await getServerAccessToken();
+  if (!session || !accessToken) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const octokit = createOctokitClient(session.accessToken);
+    const octokit = createOctokitClient(accessToken);
     const { data: repos } = await octokit.repos.listForAuthenticatedUser({
       sort: "updated",
       per_page: 100,
@@ -65,10 +53,9 @@ export async function GET() {
  * POST — Connect a repo: store in DB + create GitHub webhook.
  */
 export async function POST(request: NextRequest) {
-  const session = (await getServerSession(
-    authOptions,
-  )) as SessionWithToken | null;
-  if (!session?.accessToken) {
+  const session = await getAuthSession();
+  const accessToken = await getServerAccessToken(request);
+  if (!session || !accessToken) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -107,7 +94,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create webhook on GitHub
-    const octokit = createOctokitClient(session.accessToken);
+    const octokit = createOctokitClient(accessToken);
     const webhookUrl = `${process.env.NEXTAUTH_URL}/api/webhooks/github`;
     const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET;
 
@@ -158,11 +145,9 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error connecting repo:", error);
+    // SECURITY: Never expose internal error details to the client
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Failed to connect repo",
-      },
+      { error: "Failed to connect repo" },
       { status: 500 },
     );
   }
@@ -172,10 +157,9 @@ export async function POST(request: NextRequest) {
  * DELETE — Disconnect a repo: remove webhook + delete from DB.
  */
 export async function DELETE(request: NextRequest) {
-  const session = (await getServerSession(
-    authOptions,
-  )) as SessionWithToken | null;
-  if (!session?.accessToken) {
+  const session = await getAuthSession();
+  const accessToken = await getServerAccessToken(request);
+  if (!session || !accessToken) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -208,7 +192,7 @@ export async function DELETE(request: NextRequest) {
     // Remove webhook from GitHub
     if (existingRepo.webhookId) {
       try {
-        const octokit = createOctokitClient(session.accessToken);
+        const octokit = createOctokitClient(accessToken);
         await octokit.repos.deleteWebhook({
           owner,
           repo,
