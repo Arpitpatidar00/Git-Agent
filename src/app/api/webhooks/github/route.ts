@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { verifyWebhookSignature } from "@/lib/github/verify";
 import { enqueueEvent } from "@/lib/jobs/enqueue";
 import { prisma } from "@/lib/db/prisma";
@@ -91,15 +91,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // In development mode, trigger the worker asynchronously in the background
-  // so the user doesn't have to hit /api/jobs/run manually.
-  if (process.env.NODE_ENV === "development") {
-    import("@/lib/jobs/worker").then(({ processJobs }) => {
-      processJobs().catch((err) =>
-        console.error("Failed to run background development worker:", err)
-      );
-    });
-  }
+  // Trigger background job processing after the response has finished.
+  // This allows real-time execution in both dev and prod without blocking the client.
+  after(async () => {
+    try {
+      const { processJobs } = await import("@/lib/jobs/worker");
+      await processJobs();
+    } catch (err) {
+      console.error("Failed to run background worker in after():", err);
+    }
+  });
 
   // 7. Return 200 fast — worker will process asynchronously
   return NextResponse.json(
