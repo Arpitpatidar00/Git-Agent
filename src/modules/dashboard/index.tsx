@@ -2,7 +2,7 @@
 
 import { useDashboardEvents } from "@/lib/hooks/useDashboard";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { StatusBadge } from "./components/StatusBadge";
 import { StatCard } from "./components/StatCard";
 import { TimeAgo } from "./components/TimeAgo";
@@ -11,6 +11,10 @@ import { GlassCard } from "@/components/glass";
 export function DashboardView() {
   const parentRef = useRef<HTMLDivElement>(null);
 
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [repoFilter, setRepoFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const {
     data,
@@ -24,9 +28,37 @@ export function DashboardView() {
   const events = data ? data.pages.flatMap((page) => page.events) : [];
   const latestPage = data?.pages[data.pages.length - 1];
   const stats = latestPage?.stats || [];
+  const repos = latestPage?.repos || [];
+
+  const filteredEvents = events.filter((event) => {
+    // status filter
+    if (statusFilter !== "all") {
+      if (statusFilter === "pending") {
+        if (event.status !== "received" && event.status !== "processing") return false;
+      } else if (statusFilter === "failed") {
+        if (event.status !== "failed" && event.status !== "dead") return false;
+      } else if (event.status !== statusFilter) {
+        return false;
+      }
+    }
+    // event type filter
+    if (typeFilter !== "all" && event.eventType !== typeFilter) return false;
+    // repo filter
+    if (repoFilter !== "all" && event.repo.fullName !== repoFilter) return false;
+    // search filter
+    if (searchQuery.trim() !== "") {
+      const query = searchQuery.toLowerCase();
+      const payloadObj = (event.payload || {}) as any;
+      const issueTitle = payloadObj.issue?.title || "";
+      const prTitle = payloadObj.pull_request?.title || "";
+      const matchText = `${event.repo.fullName} ${event.eventType} ${event.githubDeliveryId} ${event.action || ""} ${issueTitle} ${prTitle}`.toLowerCase();
+      if (!matchText.includes(query)) return false;
+    }
+    return true;
+  });
 
   const rowVirtualizer = useVirtualizer({
-    count: events.length,
+    count: filteredEvents.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 110,
     overscan: 5,
@@ -39,7 +71,7 @@ export function DashboardView() {
     if (!lastItem) return;
 
     if (
-      lastItem.index >= events.length - 1 &&
+      lastItem.index >= filteredEvents.length - 1 &&
       hasNextPage &&
       !isFetchingNextPage
     ) {
@@ -47,7 +79,7 @@ export function DashboardView() {
     }
   }, [
     virtualItems,
-    events.length,
+    filteredEvents.length,
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
@@ -154,16 +186,71 @@ export function DashboardView() {
           </div>
         </div>
 
-        {events.length === 0 ? (
+        {/* Filters Bar */}
+        <div className="px-6 py-3 border-b border-[var(--glass-border)] bg-white/[0.01] flex flex-wrap gap-4 items-center shrink-0">
+          <div className="flex-1 min-w-[200px]">
+            <input
+              type="text"
+              placeholder="Search by repo, delivery ID, title..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-foreground placeholder-muted/50 focus:outline-none focus:ring-1 focus:ring-primary/45 transition"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted font-medium">Repository:</span>
+            <select
+              value={repoFilter}
+              onChange={(e) => setRepoFilter(e.target.value)}
+              className="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/45 cursor-pointer"
+            >
+              <option value="all">All Repos</option>
+              {repos.map((r: any) => (
+                <option key={r.id} value={r.fullName}>
+                  {r.fullName}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted font-medium">Event:</span>
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/45 cursor-pointer"
+            >
+              <option value="all">All Types</option>
+              <option value="issues">Issues</option>
+              <option value="pull_request">PRs</option>
+              <option value="issue_comment">Comments</option>
+              <option value="push">Pushes</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted font-medium">Status:</span>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/45 cursor-pointer"
+            >
+              <option value="all">All Statuses</option>
+              <option value="done">Done</option>
+              <option value="failed">Failed / Dead</option>
+              <option value="pending">Pending</option>
+            </select>
+          </div>
+        </div>
+
+        {filteredEvents.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center p-16 text-center">
             <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/5 flex items-center justify-center mb-4 shadow-xl">
               <svg className="w-8 h-8 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0-3-3m3 3 3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" />
               </svg>
             </div>
-            <p className="font-semibold text-muted text-base">No events yet</p>
+            <p className="font-semibold text-muted text-base">No matching events</p>
             <p className="text-xs text-muted/65 mt-1 max-w-sm mx-auto">
-              Connect a repo and trigger some GitHub events to see them here
+              Try adjusting your filters or connect a new repo to trigger GitHub events.
             </p>
           </div>
         ) : (
@@ -176,7 +263,7 @@ export function DashboardView() {
               }}
             >
               {virtualItems.map((virtualRow) => {
-                const event = events[virtualRow.index];
+                const event = filteredEvents[virtualRow.index];
                 if (!event) return null;
                 return (
                   <div

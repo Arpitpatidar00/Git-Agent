@@ -17,6 +17,7 @@ export interface Event {
   githubDeliveryId: string;
   repo: { fullName: string };
   actions: ActionLog[];
+  payload?: any;
 }
 
 export interface Stat {
